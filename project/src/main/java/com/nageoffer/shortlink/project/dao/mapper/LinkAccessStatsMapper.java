@@ -61,6 +61,12 @@ public interface LinkAccessStatsMapper extends BaseMapper<LinkAccessStatsDO> {
             "    AND gid = #{param.gid} " +
             "    AND date BETWEEN #{param.startDate} and #{param.endDate} " +
             "GROUP BY " +
+            // TODO GROUP BY用法
+            //写全这三个字段（full_short_url, gid, date）
+            // 1. 利用复合索引优化性能，
+            // 2. 遵循 SQL 标准与扩展性，
+            // 3. 应对未来查询条件的变化（如果改为WHERE full_short_url IN ('link A', 'link B')，则full_short_url就有用了）
+            //SELECT full_short_url, date, SUM(pv) AS pv, SUM(uv) AS uv, SUM(uip) AS uip FROM t_link_access_stats WHERE full_short_url IN ('nurl.ink/1i08dA', 'nurl.ink/3wA6lQ') AND date BETWEEN '2025-11-11' and '2025-11-13' GROUP BY full_short_url, date;
             "    full_short_url, gid, date;")
     List<LinkAccessStatsDO> listStatsByShortLink(@Param("param") ShortLinkStatsReqDTO requestParam);
 

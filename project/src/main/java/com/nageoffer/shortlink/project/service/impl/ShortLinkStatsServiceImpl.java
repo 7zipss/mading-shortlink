@@ -78,23 +78,42 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
     private final LinkDeviceStatsMapper linkDeviceStatsMapper;
     private final LinkNetworkStatsMapper linkNetworkStatsMapper;
 
+    /**
+     * 获取单个短链接监控数据
+     */
     @Override
     public ShortLinkStatsRespDTO oneShortLinkStats(ShortLinkStatsReqDTO requestParam) {
+        // 1. 查询指定日期范围内，该短链接的基础访问统计数据（按日期分组）
         List<LinkAccessStatsDO> listStatsByShortLink = linkAccessStatsMapper.listStatsByShortLink(requestParam);
+
+        // 如果没有查到数据，说明该段时间内无访问，直接返回 null
         if (CollUtil.isEmpty(listStatsByShortLink)) {
             return null;
         }
-        // 基础访问数据
+
+        // 2. 查询总的 PV (访问量), UV (独立访客数), UIP (独立IP数)
+        // 注意：这里是从日志表 t_link_access_logs 精确统计聚合出来的
         LinkAccessStatsDO pvUvUidStatsByShortLink = linkAccessLogsMapper.findPvUvUidStatsByShortLink(requestParam);
-        // 基础访问详情
+
+        // 3. 构建每日访问详情 (用于前端绘制折线图)
         List<ShortLinkStatsAccessDailyRespDTO> daily = new ArrayList<>();
-        List<String> rangeDates = DateUtil.rangeToList(DateUtil.parse(requestParam.getStartDate()), DateUtil.parse(requestParam.getEndDate()), DateField.DAY_OF_MONTH).stream()
+        // 使用 Hutool 工具生成从 startDate 到 endDate 的所有日期字符串列表
+        List<String> rangeDates = DateUtil
+                .rangeToList(DateUtil.parse(requestParam.getStartDate()),
+                                                            DateUtil.parse(requestParam.getEndDate()),
+                                                                DateField.DAY_OF_MONTH)
+                .stream()
                 .map(DateUtil::formatDate)
                 .toList();
-        rangeDates.forEach(each -> listStatsByShortLink.stream()
-                .filter(item -> Objects.equals(each, DateUtil.formatDate(item.getDate())))
-                .findFirst()
-                .ifPresentOrElse(item -> {
+
+        // 遍历日期范围，匹配数据库查询结果
+        rangeDates.forEach(
+                each -> listStatsByShortLink
+                        .stream()
+                        .filter(item -> Objects.equals(each, DateUtil.formatDate(item.getDate())))
+                        .findFirst()
+                        .ifPresentOrElse(item -> {
+                    // 如果数据库有当天数据，填入真实数据
                     ShortLinkStatsAccessDailyRespDTO accessDailyRespDTO = ShortLinkStatsAccessDailyRespDTO.builder()
                             .date(each)
                             .pv(item.getPv())
@@ -103,6 +122,7 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                             .build();
                     daily.add(accessDailyRespDTO);
                 }, () -> {
+                    // 如果数据库没有当天数据，填入 0，保证图表连续性
                     ShortLinkStatsAccessDailyRespDTO accessDailyRespDTO = ShortLinkStatsAccessDailyRespDTO.builder()
                             .date(each)
                             .pv(0)
@@ -111,14 +131,17 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                             .build();
                     daily.add(accessDailyRespDTO);
                 }));
-        // 地区访问详情（仅国内）
+
+        // 4. 地区访问详情（仅国内）及占比计算
         List<ShortLinkStatsLocaleCNRespDTO> localeCnStats = new ArrayList<>();
         List<LinkLocaleStatsDO> listedLocaleByShortLink = linkLocaleStatsMapper.listLocaleByShortLink(requestParam);
+        // 计算所有地区访问总和，用于分母计算占比
         int localeCnSum = listedLocaleByShortLink.stream()
                 .mapToInt(LinkLocaleStatsDO::getCnt)
                 .sum();
         listedLocaleByShortLink.forEach(each -> {
             double ratio = (double) each.getCnt() / localeCnSum;
+            // 保留两位小数
             double actualRatio = Math.round(ratio * 100.0) / 100.0;
             ShortLinkStatsLocaleCNRespDTO localeCNRespDTO = ShortLinkStatsLocaleCNRespDTO.builder()
                     .cnt(each.getCnt())
@@ -127,7 +150,8 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                     .build();
             localeCnStats.add(localeCNRespDTO);
         });
-        // 小时访问详情
+
+        // 5. 小时访问详情 (0-23点)
         List<Integer> hourStats = new ArrayList<>();
         List<LinkAccessStatsDO> listHourStatsByShortLink = linkAccessStatsMapper.listHourStatsByShortLink(requestParam);
         for (int i = 0; i < 24; i++) {
@@ -136,11 +160,13 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                     .filter(each -> Objects.equals(each.getHour(), hour.get()))
                     .findFirst()
                     .map(LinkAccessStatsDO::getPv)
-                    .orElse(0);
+                    .orElse(0); // 若某小时无数据，补0
             hourStats.add(hourCnt);
         }
-        // 高频访问IP详情
+
+        // 6. 高频访问 IP 详情 (通常取 Top 5)
         List<ShortLinkStatsTopIpRespDTO> topIpStats = new ArrayList<>();
+        // HashMap<String, Object> = { "ip" = "192.168.1.1", "count" = 10 }
         List<HashMap<String, Object>> listTopIpByShortLink = linkAccessLogsMapper.listTopIpByShortLink(requestParam);
         listTopIpByShortLink.forEach(each -> {
             ShortLinkStatsTopIpRespDTO statsTopIpRespDTO = ShortLinkStatsTopIpRespDTO.builder()
@@ -149,10 +175,11 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                     .build();
             topIpStats.add(statsTopIpRespDTO);
         });
-        // 一周访问详情
+
+        // 7. 一周访问详情 (周一至周日)
         List<Integer> weekdayStats = new ArrayList<>();
         List<LinkAccessStatsDO> listWeekdayStatsByShortLink = linkAccessStatsMapper.listWeekdayStatsByShortLink(requestParam);
-        for (int i = 1; i < 8; i++) {
+        for (int i = 1; i < 8; i++) { // 1代表周一，7代表周日
             AtomicInteger weekday = new AtomicInteger(i);
             int weekdayCnt = listWeekdayStatsByShortLink.stream()
                     .filter(each -> Objects.equals(each.getWeekday(), weekday.get()))
@@ -161,7 +188,8 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                     .orElse(0);
             weekdayStats.add(weekdayCnt);
         }
-        // 浏览器访问详情
+
+        // 8. 浏览器访问详情及占比
         List<ShortLinkStatsBrowserRespDTO> browserStats = new ArrayList<>();
         List<HashMap<String, Object>> listBrowserStatsByShortLink = linkBrowserStatsMapper.listBrowserStatsByShortLink(requestParam);
         int browserSum = listBrowserStatsByShortLink.stream()
@@ -177,7 +205,8 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                     .build();
             browserStats.add(browserRespDTO);
         });
-        // 操作系统访问详情
+
+        // 9. 操作系统访问详情及占比
         List<ShortLinkStatsOsRespDTO> osStats = new ArrayList<>();
         List<HashMap<String, Object>> listOsStatsByShortLink = linkOsStatsMapper.listOsStatsByShortLink(requestParam);
         int osSum = listOsStatsByShortLink.stream()
@@ -193,15 +222,19 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                     .build();
             osStats.add(osRespDTO);
         });
-        // 访客访问类型详情
+
+        // 10. 访客类型详情 (新老访客)
         List<ShortLinkStatsUvRespDTO> uvTypeStats = new ArrayList<>();
+        // findUvTypeByShortLink = { "oldUserCnt" = 10, "newUserCnt" = 20 }
         HashMap<String, Object> findUvTypeByShortLink = linkAccessLogsMapper.findUvTypeCntByShortLink(requestParam);
+        // 获取老访客数量
         int oldUserCnt = Integer.parseInt(
                 Optional.ofNullable(findUvTypeByShortLink)
                         .map(each -> each.get("oldUserCnt"))
                         .map(Object::toString)
                         .orElse("0")
         );
+        // 获取新访客数量
         int newUserCnt = Integer.parseInt(
                 Optional.ofNullable(findUvTypeByShortLink)
                         .map(each -> each.get("newUserCnt"))
@@ -213,19 +246,23 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
         double actualOldRatio = Math.round(oldRatio * 100.0) / 100.0;
         double newRatio = (double) newUserCnt / uvSum;
         double actualNewRatio = Math.round(newRatio * 100.0) / 100.0;
+
+        // 添加新访客数据
         ShortLinkStatsUvRespDTO newUvRespDTO = ShortLinkStatsUvRespDTO.builder()
                 .uvType("newUser")
                 .cnt(newUserCnt)
                 .ratio(actualNewRatio)
                 .build();
         uvTypeStats.add(newUvRespDTO);
+        // 添加老访客数据
         ShortLinkStatsUvRespDTO oldUvRespDTO = ShortLinkStatsUvRespDTO.builder()
                 .uvType("oldUser")
                 .cnt(oldUserCnt)
                 .ratio(actualOldRatio)
                 .build();
         uvTypeStats.add(oldUvRespDTO);
-        // 访问设备类型详情
+
+        // 11. 访问设备类型详情及占比
         List<ShortLinkStatsDeviceRespDTO> deviceStats = new ArrayList<>();
         List<LinkDeviceStatsDO> listDeviceStatsByShortLink = linkDeviceStatsMapper.listDeviceStatsByShortLink(requestParam);
         int deviceSum = listDeviceStatsByShortLink.stream()
@@ -241,7 +278,8 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                     .build();
             deviceStats.add(deviceRespDTO);
         });
-        // 访问网络类型详情
+
+        // 12. 访问网络类型详情及占比
         List<ShortLinkStatsNetworkRespDTO> networkStats = new ArrayList<>();
         List<LinkNetworkStatsDO> listNetworkStatsByShortLink = linkNetworkStatsMapper.listNetworkStatsByShortLink(requestParam);
         int networkSum = listNetworkStatsByShortLink.stream()
@@ -257,6 +295,8 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                     .build();
             networkStats.add(networkRespDTO);
         });
+
+        // 13. 组装最终响应对象并返回
         return ShortLinkStatsRespDTO.builder()
                 .pv(pvUvUidStatsByShortLink.getPv())
                 .uv(pvUvUidStatsByShortLink.getUv())
@@ -274,6 +314,7 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                 .build();
     }
 
+    //TODO 目前与上面单条短链接监控一致，后续数据库移除gid后有改变
     @Override
     public ShortLinkStatsRespDTO groupShortLinkStats(ShortLinkGroupStatsReqDTO requestParam) {
         List<LinkAccessStatsDO> listStatsByGroup = linkAccessStatsMapper.listStatsByGroup(requestParam);
@@ -437,19 +478,52 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                 .build();
     }
 
+    /**
+     * 访问单个短链接指定时间内访问记录监控数据
+     *
+     * 核心逻辑：
+     * 1. 分页查询访问日志表 (t_link_access_logs)。
+     * 2. 获取当前页所有日志的用户列表。
+     * 3. 批量查询这些用户的“首次访问时间”，以此判断是新访客还是老访客。
+     * 4. 组装结果返回。
+     */
     @Override
     public IPage<ShortLinkStatsAccessRecordRespDTO> shortLinkStatsAccessRecord(ShortLinkStatsAccessRecordReqDTO requestParam) {
+        // 1. 构建数据库查询条件 (MyBatis-Plus LambdaQueryWrapper)
         LambdaQueryWrapper<LinkAccessLogsDO> queryWrapper = Wrappers.lambdaQuery(LinkAccessLogsDO.class)
-                .eq(LinkAccessLogsDO::getGid, requestParam.getGid())
-                .eq(LinkAccessLogsDO::getFullShortUrl, requestParam.getFullShortUrl())
+                .eq(LinkAccessLogsDO::getGid, requestParam.getGid()) // 匹配分组
+                .eq(LinkAccessLogsDO::getFullShortUrl, requestParam.getFullShortUrl()) // 匹配短链接
+                // 筛选时间范围：create_time BETWEEN startDate AND endDate
                 .between(LinkAccessLogsDO::getCreateTime, requestParam.getStartDate(), requestParam.getEndDate())
-                .eq(LinkAccessLogsDO::getDelFlag, 0)
-                .orderByDesc(LinkAccessLogsDO::getCreateTime);
+                .eq(LinkAccessLogsDO::getDelFlag, 0) // 未删除
+                .orderByDesc(LinkAccessLogsDO::getCreateTime); // 按访问时间倒序排列，最新的在前
+
+        // 2. 执行分页查询
+        // selectPage 是 MyBatis-Plus 提供的内置方法，自动处理 LIMIT 分页逻辑
         IPage<LinkAccessLogsDO> linkAccessLogsDOIPage = linkAccessLogsMapper.selectPage(requestParam, queryWrapper);
-        IPage<ShortLinkStatsAccessRecordRespDTO> actualResult = linkAccessLogsDOIPage.convert(each -> BeanUtil.toBean(each, ShortLinkStatsAccessRecordRespDTO.class));
+
+        // 3. DO (数据库实体) -> DTO (响应实体) 转换
+        // 此时 DTO 中的 uvType (访客类型) 字段还是空的，需要后续填充
+        IPage<ShortLinkStatsAccessRecordRespDTO> actualResult = linkAccessLogsDOIPage
+                .convert(each -> BeanUtil.toBean(each, ShortLinkStatsAccessRecordRespDTO.class));
+
+        // 4. 提取当前页的所有用户标识 (User)，用于批量查询访客类型
+        // 这里的 User 通常是 Cookie 中的 UV 标识或 IP 标识
         List<String> userAccessLogsList = actualResult.getRecords().stream()
                 .map(ShortLinkStatsAccessRecordRespDTO::getUser)
                 .toList();
+
+        // 【优化点】如果当前页没有数据，理论上应该直接返回，避免后续执行空列表 SQL 报错
+        if (CollUtil.isEmpty(userAccessLogsList)) {
+            return actualResult;
+        }
+
+        // 5. 批量查询访客类型 (核心业务逻辑)
+        // 调用 Mapper 自定义 SQL，根据 User 分组计算其最早访问时间
+        // 如果 最早访问时间 在本次查询的时间范围内 -> 新访客
+        // 否则 -> 老访客
+        // uvTypeList = [{"user": "user1", "UvType": "新访客"}, {"user": "user2", "UvType": "旧访客"}, ...]
+        // TODO N + 1问题优化为一次查询
         List<Map<String, Object>> uvTypeList = linkAccessLogsMapper.selectUvTypeByUsers(
                 requestParam.getGid(),
                 requestParam.getFullShortUrl(),
@@ -457,18 +531,24 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                 requestParam.getEndDate(),
                 userAccessLogsList
         );
+
+        // 6. 内存匹配与数据回填
+        // 遍历分页结果，将查询到的 uvType 填入对应的记录中
         actualResult.getRecords().forEach(each -> {
             String uvType = uvTypeList.stream()
+                    // 在结果集中找到当前日志用户对应的类型
                     .filter(item -> Objects.equals(each.getUser(), item.get("user")))
                     .findFirst()
                     .map(item -> item.get("UvType"))
                     .map(Object::toString)
-                    .orElse("旧访客");
+                    .orElse("旧访客"); // 兜底逻辑：如果没查到（理论上不应发生），默认为旧访客
             each.setUvType(uvType);
         });
+
         return actualResult;
     }
 
+    //TODO 目前与上面单条短链接监控一致，后续数据库移除gid后有改变
     @Override
     public IPage<ShortLinkStatsAccessRecordRespDTO> groupShortLinkStatsAccessRecord(ShortLinkGroupStatsAccessRecordReqDTO requestParam) {
         LambdaQueryWrapper<LinkAccessLogsDO> queryWrapper = Wrappers.lambdaQuery(LinkAccessLogsDO.class)
@@ -477,7 +557,8 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
                 .eq(LinkAccessLogsDO::getDelFlag, 0)
                 .orderByDesc(LinkAccessLogsDO::getCreateTime);
         IPage<LinkAccessLogsDO> linkAccessLogsDOIPage = linkAccessLogsMapper.selectPage(requestParam, queryWrapper);
-        IPage<ShortLinkStatsAccessRecordRespDTO> actualResult = linkAccessLogsDOIPage.convert(each -> BeanUtil.toBean(each, ShortLinkStatsAccessRecordRespDTO.class));
+        IPage<ShortLinkStatsAccessRecordRespDTO> actualResult = linkAccessLogsDOIPage
+                .convert(each -> BeanUtil.toBean(each, ShortLinkStatsAccessRecordRespDTO.class));
         List<String> userAccessLogsList = actualResult.getRecords().stream()
                 .map(ShortLinkStatsAccessRecordRespDTO::getUser)
                 .toList();

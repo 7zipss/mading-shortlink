@@ -80,7 +80,10 @@ public interface LinkAccessLogsMapper extends BaseMapper<LinkAccessLogsDO> {
             "    SUM(new_user) AS newUserCnt " +
             "FROM ( " +
             "    SELECT " +
+            // -- 老访客逻辑：访问活跃天数大于 1 天（如果一个用户在历史上（不限时间范围）出现在两个或两个以上不同的日期，就被标记为老访客（返回 1）。）
             "        CASE WHEN COUNT(DISTINCT DATE(create_time)) > 1 THEN 1 ELSE 0 END AS old_user, " +
+            // -- 新访客逻辑：仅访问过 1 天，且这一天是在查询的时间范围内（真正的“新增用户”。以前没来过，最近才来（且只来过这一天）。）
+            // 被忽略的用户（既不是新也不是老）：如果一个用户只在历史上访问过 1 天（COUNT=1），但那一天是在查询范围之前（例如去年访问过一次，之后再没来过）
             "        CASE WHEN COUNT(DISTINCT DATE(create_time)) = 1 AND MAX(create_time) >= #{param.startDate} AND MAX(create_time) <= #{param.endDate} THEN 1 ELSE 0 END AS new_user " +
             "    FROM " +
             "        t_link_access_logs " +
@@ -99,6 +102,8 @@ public interface LinkAccessLogsMapper extends BaseMapper<LinkAccessLogsDO> {
             "SELECT " +
             "    user, " +
             "    CASE " +
+            //      -- 核心判断逻辑：找到该用户历史上最早的一次访问时间 (MIN(create_time))
+            //      -- 如果最早时间落在本次查询选定的时间窗口内，说明他是这段时间才第一次来的 -> "新访客"
             "        WHEN MIN(create_time) BETWEEN #{startDate} AND #{endDate} THEN '新访客' " +
             "        ELSE '老访客' " +
             "    END AS uvType " +
@@ -107,6 +112,7 @@ public interface LinkAccessLogsMapper extends BaseMapper<LinkAccessLogsDO> {
             "WHERE " +
             "    full_short_url = #{fullShortUrl} " +
             "    AND gid = #{gid} " +
+            // -- 仅查询当前分页列表中的那 10 个（或每页数量）用户，避免全表扫描，极大提升性能
             "    AND user IN " +
             "    <foreach item='item' index='index' collection='userAccessLogsList' open='(' separator=',' close=')'> " +
             "        #{item} " +
