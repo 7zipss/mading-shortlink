@@ -40,7 +40,7 @@ import static com.nageoffer.shortlink.project.common.constant.RedisKeyConstant.G
 
 /**
  * 回收站管理接口实现层
- * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：link）获取项目资料
+ * TODO 无专门的回收站数据库表，直接修改t_link字段完成回收站的逻辑
  */
 @Service
 @RequiredArgsConstructor
@@ -58,7 +58,10 @@ public class RecycleBinServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLin
         ShortLinkDO shortLinkDO = ShortLinkDO.builder()
                 .enableStatus(1)
                 .build();
+        // 第一个参数 (shortLinkDO)：决定“修改什么”
+        // 第二个参数 (updateWrapper)：决定“修改谁” (WHERE 子句)
         baseMapper.update(shortLinkDO, updateWrapper);
+        // 短链接进入回收站后，删除redis缓存
         stringRedisTemplate.delete(String.format(GOTO_SHORT_LINK_KEY, requestParam.getFullShortUrl()));
     }
 
@@ -88,9 +91,13 @@ public class RecycleBinServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLin
                 .enableStatus(0)
                 .build();
         baseMapper.update(shortLinkDO, updateWrapper);
+        // 短链接恢复使用后，删除redis缓存的空值
         stringRedisTemplate.delete(String.format(GOTO_IS_NULL_SHORT_LINK_KEY, requestParam.getFullShortUrl()));
     }
 
+    /**
+     * （逻辑上）彻底移除短链接
+     */
     @Override
     public void removeRecycleBin(RecycleBinRemoveReqDTO requestParam) {
         LambdaUpdateWrapper<ShortLinkDO> updateWrapper = Wrappers.lambdaUpdate(ShortLinkDO.class)
