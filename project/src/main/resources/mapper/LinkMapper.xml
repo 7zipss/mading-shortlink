@@ -23,16 +23,19 @@
     <select id="pageLink" parameterType="com.nageoffer.shortlink.project.dto.req.ShortLinkPageReqDTO"
             resultType="com.nageoffer.shortlink.project.dao.entity.ShortLinkDO">
         SELECT t.*,
+        -- 使用 COALESCE 函数处理 NULL 值：如果今日没有数据，显示为 0
         COALESCE(s.today_pv, 0) AS todayPv,
         COALESCE(s.today_uv, 0) AS todayUv,
         COALESCE(s.today_uip, 0) AS todayUip
         FROM t_link t
+        -- 左连接今日统计表，关联条件是 GID、短链接和日期(CURDATE)
         LEFT JOIN t_link_stats_today s ON t.gid = s.gid
-        AND t.full_short_url = s.full_short_url
-        AND s.date = CURDATE()
+            AND t.full_short_url = s.full_short_url
+            AND s.date = CURDATE()
         WHERE t.gid = #{gid}
-        AND t.enable_status = 0
-        AND t.del_flag = 0
+            AND t.enable_status = 0
+            AND t.del_flag = 0
+        -- 动态排序逻辑
         <choose>
             <when test="orderTag == 'todayPv'">
                 ORDER BY todayPv DESC

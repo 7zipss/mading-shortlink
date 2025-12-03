@@ -37,7 +37,11 @@ public interface LinkAccessStatsMapper extends BaseMapper<LinkAccessStatsDO> {
      * 记录基础访问监控数据
      */
     @Insert("INSERT INTO t_link_access_stats (full_short_url, gid, date, pv, uv, uip, hour, weekday, create_time, update_time, del_flag) " +
-            "VALUES( #{linkAccessStats.fullShortUrl}, #{linkAccessStats.gid}, #{linkAccessStats.date}, #{linkAccessStats.pv}, #{linkAccessStats.uv}, #{linkAccessStats.uip}, #{linkAccessStats.hour}, #{linkAccessStats.weekday}, NOW(), NOW(), 0) ON DUPLICATE KEY UPDATE pv = pv +  #{linkAccessStats.pv}, " +
+            "VALUES( #{linkAccessStats.fullShortUrl}, #{linkAccessStats.gid}, #{linkAccessStats.date}, #{linkAccessStats.pv}, #{linkAccessStats.uv}, #{linkAccessStats.uip}, #{linkAccessStats.hour}, #{linkAccessStats.weekday}, NOW(), NOW(), 0) " +
+            // 如果尝试插入时，数据库发现这就违反了唯一性约束（full_short_url + date + hour 的组合索引同时冲突），
+            // MySQL 不会报错，而是触发 ON DUPLICATE KEY 后面的 UPDATE 逻辑：
+            "ON DUPLICATE KEY UPDATE " +
+            "pv = pv +  #{linkAccessStats.pv}, " +
             "uv = uv + #{linkAccessStats.uv}, " +
             " uip = uip + #{linkAccessStats.uip};")
     void shortLinkStats(@Param("linkAccessStats") LinkAccessStatsDO linkAccessStatsDO);
