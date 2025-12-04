@@ -136,6 +136,7 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
     private final ShortLinkStatsSaveProducer shortLinkStatsSaveProducer;
     private final GotoDomainWhiteListConfiguration gotoDomainWhiteListConfiguration;
 
+    // 通过 @Value 注解注入配置文件中的域名。
     @Value("${short-link.domain.default}")
     private String createShortLinkDefaultDomain;
 
@@ -144,6 +145,7 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
     public ShortLinkCreateRespDTO createShortLink(ShortLinkCreateReqDTO requestParam) {
         verificationWhitelist(requestParam.getOriginUrl());
         String shortLinkSuffix = generateSuffix(requestParam);
+        // 忽略请求参数中的域名，统一使用服务端配置的 createShortLinkDefaultDomain
         String fullShortUrl = StrBuilder.create(createShortLinkDefaultDomain)
                 .append("/")
                 .append(shortLinkSuffix)
@@ -401,11 +403,13 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
     @Override
     public void restoreUrl(String shortUri, ServletRequest request, ServletResponse response) {
         String serverName = request.getServerName();
+        // 新增端口号
+        // 这段逻辑的目的是还原用户访问的完整短链接，以便用这个完整链接作为 Key 去数据库或缓存中查找原始链接。
         String serverPort = Optional.of(request.getServerPort())
-                .filter(each -> !Objects.equals(each, 80))
+                .filter(each -> !Objects.equals(each, 80)) // 过滤掉 80 端口
                 .map(String::valueOf)
-                .map(each -> ":" + each)
-                .orElse("");
+                .map(each -> ":" + each) // 非 80 端口前加冒号
+                .orElse(""); // 80 端口返回空字符串
         String fullShortUrl = serverName + serverPort + "/" + shortUri;
         String originalLink = stringRedisTemplate.opsForValue().get(String.format(GOTO_SHORT_LINK_KEY, fullShortUrl));
         if (StrUtil.isNotBlank(originalLink)) {
