@@ -37,9 +37,17 @@ public class ShortLinkStatsSaveProducer {
     private final StringRedisTemplate stringRedisTemplate;
 
     /**
-     * 发送延迟消费短链接统计
+     * 发送短链接监控统计消息到 Redis Stream
+     *
+     * @param producerMap 包含统计数据的 Map 消息体
+     * key: fullShortUrl, gid, statsRecord
      */
     public void send(Map<String, String> producerMap) {
+        // 使用 StringRedisTemplate 操作 Redis Stream
+        // opsForStream().add() 对应 Redis 命令：XADD key * field value [field value ...]
+        // 参数 1: SHORT_LINK_STATS_STREAM_TOPIC_KEY -> Redis 中的 Key (Topic)
+        // 参数 2: producerMap -> 消息内容
+        // 返回值: RecordId (消息 ID)，这里虽然没接收，但在实际业务中可以用于日志记录
         stringRedisTemplate.opsForStream().add(SHORT_LINK_STATS_STREAM_TOPIC_KEY, producerMap);
     }
 }

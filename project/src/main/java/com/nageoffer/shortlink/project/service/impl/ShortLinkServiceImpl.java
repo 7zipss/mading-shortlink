@@ -454,6 +454,7 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
                 .map(each -> ":" + each) // 非 80 端口前加冒号
                 .orElse(""); // 80 端口返回空字符串
         String fullShortUrl = serverName + serverPort + "/" + shortUri;
+        // redis中存在缓存直接跳转
         String originalLink = stringRedisTemplate.opsForValue().get(String.format(GOTO_SHORT_LINK_KEY, fullShortUrl));
         if (StrUtil.isNotBlank(originalLink)) {
             ShortLinkStatsRecordDTO statsRecord = buildLinkStatsRecordAndSetUser(fullShortUrl, request, response);
@@ -461,19 +462,23 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
             ((HttpServletResponse) response).sendRedirect(originalLink);
             return;
         }
+        // bloom过滤器判断短链接是否存在，若不存在，直接返回错误页面
         boolean contains = shortUriCreateCachePenetrationBloomFilter.contains(fullShortUrl);
         if (!contains) {
             ((HttpServletResponse) response).sendRedirect("/page/notfound");
             return;
         }
+        // 判断redis中是否缓存空值，若存在，则直接返回错误页面
         String gotoIsNullShortLink = stringRedisTemplate.opsForValue().get(String.format(GOTO_IS_NULL_SHORT_LINK_KEY, fullShortUrl));
         if (StrUtil.isNotBlank(gotoIsNullShortLink)) {
             ((HttpServletResponse) response).sendRedirect("/page/notfound");
             return;
         }
+        // 使用分布式锁进行短链接跳转（要进行数据库操作）
         RLock lock = redissonClient.getLock(String.format(LOCK_GOTO_SHORT_LINK_KEY, fullShortUrl));
         lock.lock();
         try {
+            // 再次判断一下redis缓存
             originalLink = stringRedisTemplate.opsForValue().get(String.format(GOTO_SHORT_LINK_KEY, fullShortUrl));
             if (StrUtil.isNotBlank(originalLink)) {
                 ShortLinkStatsRecordDTO statsRecord = buildLinkStatsRecordAndSetUser(fullShortUrl, request, response);
@@ -484,29 +489,44 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
             LambdaQueryWrapper<ShortLinkGotoDO> linkGotoQueryWrapper = Wrappers.lambdaQuery(ShortLinkGotoDO.class)
                     .eq(ShortLinkGotoDO::getFullShortUrl, fullShortUrl);
             ShortLinkGotoDO shortLinkGotoDO = shortLinkGotoMapper.selectOne(linkGotoQueryWrapper);
+            // goto表没有此短链接，直接返回错误页面
             if (shortLinkGotoDO == null) {
                 stringRedisTemplate.opsForValue().set(String.format(GOTO_IS_NULL_SHORT_LINK_KEY, fullShortUrl), "-", 30, TimeUnit.MINUTES);
                 ((HttpServletResponse) response).sendRedirect("/page/notfound");
                 return;
             }
+            // 获取此短链接
             LambdaQueryWrapper<ShortLinkDO> queryWrapper = Wrappers.lambdaQuery(ShortLinkDO.class)
                     .eq(ShortLinkDO::getGid, shortLinkGotoDO.getGid())
                     .eq(ShortLinkDO::getFullShortUrl, fullShortUrl)
                     .eq(ShortLinkDO::getDelFlag, 0)
                     .eq(ShortLinkDO::getEnableStatus, 0);
             ShortLinkDO shortLinkDO = baseMapper.selectOne(queryWrapper);
-
+            // 短链接不存在或者已过期（主要判断有效期），直接返回错误页面
             if (shortLinkDO == null || /*防止空指针问题（新增shortLinkDO.getValidDate() != null）*/(shortLinkDO.getValidDate() != null && shortLinkDO.getValidDate().before(new Date()))) {
+                // 因为原始有效期过期所以缓存空值
                 stringRedisTemplate.opsForValue().set(String.format(GOTO_IS_NULL_SHORT_LINK_KEY, fullShortUrl), "-", 30, TimeUnit.MINUTES);
                 ((HttpServletResponse) response).sendRedirect("/page/notfound");
                 return;
             }
+            // 缓存此短链接
             stringRedisTemplate.opsForValue().set(
                     String.format(GOTO_SHORT_LINK_KEY, fullShortUrl),
                     shortLinkDO.getOriginUrl(),
                     LinkUtil.getLinkCacheValidTime(shortLinkDO.getValidDate()), TimeUnit.MILLISECONDS
             );
+            // 处理用户的唯一标识（UV Cookie）与 统计此次访问带来的数据（ShortLinkStatsRecordDTO）
             ShortLinkStatsRecordDTO statsRecord = buildLinkStatsRecordAndSetUser(fullShortUrl, request, response);
+            // 通过redis mq异步完成
+            // t_link_access_logs、
+            // t_link_access_stats、
+            // t_link_network_stats、
+            // t_link_device_stats、
+            // t_link_locale_stats、
+            // t_link_browser_stats、
+            // t_link_os_stats、
+            // t_link_stats_today
+            // t_link表的填充与更新
             shortLinkStats(fullShortUrl, shortLinkDO.getGid(), statsRecord);
             ((HttpServletResponse) response).sendRedirect(shortLinkDO.getOriginUrl());
         } finally {
@@ -514,58 +534,116 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
         }
     }
 
+    /**
+     * 构建短链接统计实体，并设置用户唯一标识（UV Cookie）
+     *
+     * @param fullShortUrl 完整短链接
+     * @param request      HTTP 请求
+     * @param response     HTTP 响应
+     * @return 短链接统计记录 DTO
+     */
     private ShortLinkStatsRecordDTO buildLinkStatsRecordAndSetUser(String fullShortUrl, ServletRequest request, ServletResponse response) {
+        // 1. 初始化 UV 首次访问标记，默认为 false
         AtomicBoolean uvFirstFlag = new AtomicBoolean();
+        // 获取请求中的所有 Cookie
         Cookie[] cookies = ((HttpServletRequest) request).getCookies();
+        // 用于存储最终确定的 UV 标识（UUID）
         AtomicReference<String> uv = new AtomicReference<>();
+
+        // 2. 定义一个任务：当用户没有 UV Cookie 时执行
         Runnable addResponseCookieTask = () -> {
+            // 生成一个新的 UUID 作为用户标识
             uv.set(UUID.fastUUID().toString());
+            // 创建名为 "uv" 的 Cookie
             Cookie uvCookie = new Cookie("uv", uv.get());
+            // 设置 Cookie 有效期为 30 天
             uvCookie.setMaxAge(60 * 60 * 24 * 30);
+            // 设置 Cookie 的路径为当前短链接的后缀路径（例如 /AbCd12），限制作用域 TODO ？
             uvCookie.setPath(StrUtil.sub(fullShortUrl, fullShortUrl.indexOf("/"), fullShortUrl.length()));
+            // 将 Cookie 添加到响应中，发回给浏览器
             ((HttpServletResponse) response).addCookie(uvCookie);
+            // 标记为首次访问 UV
             uvFirstFlag.set(Boolean.TRUE);
+            // 将该 UV 存入 Redis 的 Set 中，用于后续判断是否重复访问该短链接
             stringRedisTemplate.opsForSet().add(SHORT_LINK_STATS_UV_KEY + fullShortUrl, uv.get());
         };
+
+        // 3. 处理 UV 逻辑
         if (ArrayUtil.isNotEmpty(cookies)) {
+            // 如果请求中带了 Cookie，尝试查找名为 "uv" 的 Cookie
             Arrays.stream(cookies)
                     .filter(each -> Objects.equals(each.getName(), "uv"))
                     .findFirst()
                     .map(Cookie::getValue)
                     .ifPresentOrElse(each -> {
+                        // Case A: 找到了 "uv" Cookie
                         uv.set(each);
+                        // 尝试将该 UV 标识加入 Redis Set 中
+                        // Redis Set 的 add 方法返回添加成功的数量：
+                        // - 如果返回 > 0，说明 Set 中之前没有这个 UV，记为该用户首次访问此短链
+                        // - 如果返回 0，说明 Set 中已有，不是首次访问
                         Long uvAdded = stringRedisTemplate.opsForSet().add(SHORT_LINK_STATS_UV_KEY + fullShortUrl, each);
                         uvFirstFlag.set(uvAdded != null && uvAdded > 0L);
-                    }, addResponseCookieTask);
+                    }, addResponseCookieTask); // Case B: 有其他 Cookie 但没有 "uv" Cookie，执行新建任务
         } else {
+            // Case C: 请求中没有任何 Cookie，执行新建任务
             addResponseCookieTask.run();
         }
+
+        // 4. 获取用户访问的真实 IP 地址
         String remoteAddr = LinkUtil.getActualIp(((HttpServletRequest) request));
+        // 5. 提取用户环境信息（操作系统、浏览器、设备、网络）
         String os = LinkUtil.getOs(((HttpServletRequest) request));
         String browser = LinkUtil.getBrowser(((HttpServletRequest) request));
         String device = LinkUtil.getDevice(((HttpServletRequest) request));
         String network = LinkUtil.getNetwork(((HttpServletRequest) request));
+
+        // 6. 处理 UIP（独立 IP）逻辑
+        // 将 IP 加入 Redis Set，利用 Set 特性去重
         Long uipAdded = stringRedisTemplate.opsForSet().add(SHORT_LINK_STATS_UIP_KEY + fullShortUrl, remoteAddr);
+        // 如果 Redis 返回添加成功（>0），说明是该 IP 首次访问此短链
         boolean uipFirstFlag = uipAdded != null && uipAdded > 0L;
+
+        // 7. 构建并返回统计记录 DTO
         return ShortLinkStatsRecordDTO.builder()
-                .fullShortUrl(fullShortUrl)
-                .uv(uv.get())
-                .uvFirstFlag(uvFirstFlag.get())
-                .uipFirstFlag(uipFirstFlag)
-                .remoteAddr(remoteAddr)
-                .os(os)
-                .browser(browser)
-                .device(device)
-                .network(network)
+                .fullShortUrl(fullShortUrl) // 完整短链接
+                .uv(uv.get())               // 用户唯一标识
+                .uvFirstFlag(uvFirstFlag.get()) // 是否 UV 新访客
+                .uipFirstFlag(uipFirstFlag)     // 是否 UIP 新 IP
+                .remoteAddr(remoteAddr)     // IP 地址
+                .os(os)                     // 操作系统
+                .browser(browser)           // 浏览器
+                .device(device)             // 设备类型
+                .network(network)           // 网络类型
                 .build();
     }
 
+    /**
+     * 短链接访问统计（v7 异步生产端）
+     *
+     * @param fullShortUrl 完整短链接（例如：nurl.ink/Am4v1s）
+     * @param gid          分组标识（如果之前查过路由表拿到 GID，传进来可以省去消费者再查一次库）
+     * @param statsRecord  统计详情实体（包含 UV、IP、浏览器、操作系统等信息）
+     */
     @Override
     public void shortLinkStats(String fullShortUrl, String gid, ShortLinkStatsRecordDTO statsRecord) {
+        // 1. 构建消息生产者的参数 Map
+        // Redis Stream 的消息体是 Key-Value 结构，这里使用 Map<String, String> 来封装
         Map<String, String> producerMap = new HashMap<>();
+
+        // 2. 放入完整短链接作为核心标识
         producerMap.put("fullShortUrl", fullShortUrl);
+
+        // 3. 放入分组 ID
+        // 这里的 GID 可能是从路由表查出来的，也可能为 null（如果消费者发现为 null 会自己去查）
         producerMap.put("gid", gid);
+
+        // 4. 放入统计详情对象
+        // 由于 Redis Stream 的值通常是字符串，所以这里将复杂的 DTO 对象序列化为 JSON 字符串存储
         producerMap.put("statsRecord", JSON.toJSONString(statsRecord));
+
+        // 5. 调用消息队列生产者，将消息推送到 Redis Stream
+        // 这一步是异步解耦的关键，只负责发，不负责等结果，极大降低了跳转接口的耗时
         shortLinkStatsSaveProducer.send(producerMap);
     }
 
