@@ -131,6 +131,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
             throw new ClientException("用户不存在");
         }
         Map<Object, Object> hasLoginMap = stringRedisTemplate.opsForHash().entries(USER_LOGIN_KEY + requestParam.getUsername());
+        // 用户已登录则返回用户token
         if (CollUtil.isNotEmpty(hasLoginMap)) {
             String token = hasLoginMap.keySet().stream()
                     .findFirst()

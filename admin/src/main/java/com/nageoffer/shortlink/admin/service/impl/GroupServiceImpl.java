@@ -82,6 +82,7 @@ public class GroupServiceImpl extends ServiceImpl<GroupMapper, GroupDO> implemen
                     .eq(GroupDO::getUsername, username)
                     .eq(GroupDO::getDelFlag, 0);
             List<GroupDO> groupDOList = baseMapper.selectList(queryWrapper);
+            // 判断是否超出分组数
             if (CollUtil.isNotEmpty(groupDOList) && groupDOList.size() == groupMaxNum) {
                 throw new ClientException(String.format("已超出最大分组数：%d", groupMaxNum));
             }
