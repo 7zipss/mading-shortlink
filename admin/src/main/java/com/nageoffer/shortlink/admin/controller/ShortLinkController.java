@@ -69,6 +69,17 @@ public class ShortLinkController {
         Result<ShortLinkBatchCreateRespDTO> shortLinkBatchCreateRespDTOResult = shortLinkRemoteService.batchCreateShortLink(requestParam);
         if (shortLinkBatchCreateRespDTOResult.isSuccess()) {
             List<ShortLinkBaseInfoRespDTO> baseLinkInfos = shortLinkBatchCreateRespDTOResult.getData().getBaseLinkInfos();
+            //baseLinkInfos：
+            //0 = ShortLinkBaseInfoRespDTO(
+            //      describe=拿个offer,
+            //      fullShortUrl=http://nurl.ink:8001/1v7E1H,
+            //      originUrl=https://nageoffer.com/)
+            //1 = ShortLinkBaseInfoRespDTO(
+            //      describe=知乎,
+            //      fullShortUrl=http://nurl.ink:8001/1YgfaM,
+            //      originUrl=https://www.zhihu.com/)
+
+            //EasyExcelWebUtil 类发挥了将批量创建结果直接导出为 Excel 文件并触发浏览器下载的作用。
             EasyExcelWebUtil.write(response, "批量创建短链接-SaaS短链接系统", ShortLinkBaseInfoRespDTO.class, baseLinkInfos);
         }
     }

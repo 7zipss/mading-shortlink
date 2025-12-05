@@ -190,6 +190,9 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
                 .build();
     }
 
+    /**
+     * 循环调用创建单条短链接实现批量创建短链接
+     */
     @Override
     public ShortLinkBatchCreateRespDTO batchCreateShortLink(ShortLinkBatchCreateReqDTO requestParam) {
         List<String> originUrls = requestParam.getOriginUrls();
