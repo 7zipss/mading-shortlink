@@ -66,6 +66,7 @@ public class ShortLinkController {
      */
     @PostMapping("/api/short-link/v1/create")
     @SentinelResource(
+            //使用SentinelRuleConfig中配置的流控规则进行限流
             value = "create_short-link",
             blockHandler = "createShortLinkBlockHandlerMethod",
             blockHandlerClass = CustomBlockHandler.class

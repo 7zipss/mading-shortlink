@@ -27,8 +27,9 @@ import com.nageoffer.shortlink.project.dto.resp.ShortLinkCreateRespDTO;
  * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：link）获取项目资料
  */
 public class CustomBlockHandler {
-
+    // 这是一个静态方法，签名必须与被保护的方法一致，但多最后一个参数 BlockException
     public static Result<ShortLinkCreateRespDTO> createShortLinkBlockHandlerMethod(ShortLinkCreateReqDTO requestParam, BlockException exception) {
+        // 返回自定义的限流提示信息
         return new Result<ShortLinkCreateRespDTO>().setCode("B100000").setMessage("当前访问网站人数过多，请稍后再试...");
     }
 }
