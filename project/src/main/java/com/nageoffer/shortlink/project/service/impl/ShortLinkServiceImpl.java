@@ -683,15 +683,18 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
     }
 
     private void verificationWhitelist(String originUrl) {
+        // 通过yaml文件中：short-link.goto-domain.white-list进行域名白名单控制
         Boolean enable = gotoDomainWhiteListConfiguration.getEnable();
         if (enable == null || !enable) {
             return;
         }
+        // www.baidu.com -> baidu.com
         String domain = LinkUtil.extractDomain(originUrl);
         if (StrUtil.isBlank(domain)) {
             throw new ClientException("跳转链接填写错误");
         }
         List<String> details = gotoDomainWhiteListConfiguration.getDetails();
+        // 域名白名单校验
         if (!details.contains(domain)) {
             throw new ClientException("演示环境为避免恶意攻击，请生成以下网站跳转链接：" + gotoDomainWhiteListConfiguration.getNames());
         }
