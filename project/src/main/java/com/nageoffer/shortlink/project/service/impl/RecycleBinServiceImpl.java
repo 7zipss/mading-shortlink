@@ -103,6 +103,7 @@ public class RecycleBinServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLin
                 .delTime(System.currentTimeMillis())
                 .build();
         delShortLinkDO.setDelFlag(1);
+        // 物理删除改为逻辑删除
         baseMapper.update(delShortLinkDO, updateWrapper);
     }
 }
