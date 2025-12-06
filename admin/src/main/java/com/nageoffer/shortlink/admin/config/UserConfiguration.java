@@ -38,6 +38,8 @@ public class UserConfiguration {
     @Bean
     public FilterRegistrationBean<UserTransmitFilter> globalUserTransmitFilter() {
         FilterRegistrationBean<UserTransmitFilter> registration = new FilterRegistrationBean<>();
+        // new UserTransmitFilter()不需要传递redis客户端，
+        // 因为gateway已经完成了将redis中userId和userName写入了请求头中
         registration.setFilter(new UserTransmitFilter());
         registration.addUrlPatterns("/*");
         registration.setOrder(0);

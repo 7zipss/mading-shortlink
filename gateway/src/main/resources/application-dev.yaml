@@ -2,20 +2,44 @@ spring:
   cloud:
     gateway:
       routes:
-        - id: short-link-admin
+        # ----------------------------------------------------
+        # 路由规则 1：后台管理服务 (Admin Service)
+        # ----------------------------------------------------
+        - id: short-link-admin            # 路由的唯一标识 ID
+
+          # [核心差异点]
+          # lb:// 表示负载均衡 (LoadBalancer)
+          # short-link-admin 是 Admin 服务在 Nacos 注册的名字
+          # 意味着网关会去 Nacos 找 short-link-admin 的 IP，而不是找 short-link-aggregation
           uri: lb://short-link-admin/api/short-link/admin/**
           predicates:
+            # 断言：当请求路径以 /api/short-link/admin/ 开头时，命中此路由
             - Path=/api/short-link/admin/**
+
           filters:
+            # 过滤器：应用自定义的 Token 校验逻辑
+            #Spring 启动时，会自动去掉末尾的 GatewayFilterFactory 这 20 个字符。
+            #因此TokenValidateGatewayFilterFactory的工厂bean名为：TokenValidate
             - name: TokenValidate
               args:
+                # 白名单配置：登录和检查用户名的接口不需要校验 Token
                 whitePathList:
                   - /api/short-link/admin/v1/user/login
                   - /api/short-link/admin/v1/user/has-username
 
-        - id: short-link-project
+        # ----------------------------------------------------
+        # 路由规则 2：C端短链服务 (Project Service)
+        # ----------------------------------------------------
+        - id: short-link-project          # 路由 ID
+
+          # [核心差异点]
+          # 将请求转发给独立的 Project 服务 (short-link-project)
           uri: lb://short-link-project/api/short-link/**
+
           predicates:
+            # 断言：匹配短链业务相关的路径
             - Path=/api/short-link/**
+
           filters:
+            # 同样应用 Token 校验过滤器（Project 服务通常只有部分接口需要，具体看内部逻辑）
             - name: TokenValidate
