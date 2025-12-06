@@ -28,7 +28,11 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
  * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：link）获取项目资料
  */
 @SpringBootApplication
+//开启服务注册与发现功能。
+//如果不加这个注解（或者不开启这个功能），你的服务就是一个离线的单机应用，Nacos（服务中心）根本不知道它的存在，它也无法向 Nacos 询问别人的地址。
 @EnableDiscoveryClient
+//启用 OpenFeign 组件，扫描并创建远程调用接口的代理对象。
+//这个注解告诉 Spring Boot：“去指定的包下面找带有 @FeignClient 的接口，帮我生成动态代理实现类，把它们变成真正的 HTTP 请求工具。”
 @EnableFeignClients("com.nageoffer.shortlink.admin.remote")
 @MapperScan("com.nageoffer.shortlink.admin.dao.mapper")
 public class ShortLinkAdminApplication {

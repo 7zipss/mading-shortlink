@@ -41,10 +41,16 @@ import java.util.List;
 
 /**
  * 短链接中台远程调用服务
- * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：link）获取项目资料
+ * value 的作用：Nacos 通讯录的“名字”
+ * url 的作用：强制“走后门”（直连）
+ * 【开发环境 -> (如果 url 属性有值，Feign 会忽略 value（Nacos 寻址），直接向 url 发送请求。)】
  */
 @FeignClient(value = "short-link-project", url = "${aggregation.remote-url:}")
 public interface ShortLinkActualRemoteService {
+
+    /**
+     * 【OpenFeign通过动态代理将接口方法转换为 HTTP 请求】
+     */
 
     /**
      * 创建短链接

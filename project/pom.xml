@@ -78,6 +78,7 @@
             <artifactId>sentinel-annotation-aspectj</artifactId>
         </dependency>
 
+        <!-- Project: 主要是被调用的（被网关、Admin 调），所以只需要注册装备（Nacos），不需要“打电话”的工具（Feign）。 -->
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>

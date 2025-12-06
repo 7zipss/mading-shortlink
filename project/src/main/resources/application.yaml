@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: short-link-project
+    name: short-link-project # nacos中本服务名
   datasource:
     driver-class-name: org.apache.shardingsphere.driver.ShardingSphereDriver
     url: jdbc:shardingsphere:classpath:shardingsphere-config-${database.env:dev}.yaml
@@ -17,6 +17,7 @@ spring:
       prefix: /templates/
       suffix: .html
   cloud:
+    # nacos服务地址（调用其他服务都要经过nacos调度、中转）
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848

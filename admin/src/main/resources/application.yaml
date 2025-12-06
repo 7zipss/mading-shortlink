@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: short-link-admin
+    name: short-link-admin # nacos中本服务名
   datasource:
     driver-class-name: org.apache.shardingsphere.driver.ShardingSphereDriver
     url: jdbc:shardingsphere:classpath:shardingsphere-config-${database.env:dev}.yaml
@@ -13,6 +13,7 @@ spring:
       port: 6379
       password: 123456
   cloud:
+    # nacos服务地址（调用其他服务都要经过nacos调度、中转）
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848
