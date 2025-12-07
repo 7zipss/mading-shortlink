@@ -87,6 +87,7 @@ public class GlobalExceptionHandler {
             String errorMessage = ReflectUtil.getFieldValue(throwable, "errorMessage").toString();
             return Results.failure(errorCode, errorMessage);
         }
+        // 拦截到注册用户异常信息返回错误，然后返回B000001
         return Results.failure();
     }
 

@@ -96,6 +96,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
             throw new ClientException(USER_NAME_EXIST);
         }
         RLock lock = redissonClient.getLock(LOCK_USER_REGISTER_KEY + requestParam.getUsername());
+        // 新版本，被阻塞线程直接抛出异常
         if (!lock.tryLock()) {
             throw new ClientException(USER_NAME_EXIST);
         }
@@ -109,6 +110,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
         } catch (DuplicateKeyException ex) {
             throw new ClientException(USER_EXIST);
         } finally {
+            // 旧版本时，第二个被阻塞线程会走到这里来，但是它都没有获得锁，所以这里会先一步报错，被全局异常处理器捕获
             lock.unlock();
         }
     }
