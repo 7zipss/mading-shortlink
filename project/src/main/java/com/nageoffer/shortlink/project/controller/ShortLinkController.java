@@ -65,6 +65,7 @@ public class ShortLinkController {
      * 创建短链接
      */
     @PostMapping("/api/short-link/v1/create")
+    //TODO 压测时，注释掉限流
     @SentinelResource(
             value = "create_short-link",
             blockHandler = "createShortLinkBlockHandlerMethod",

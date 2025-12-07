@@ -113,6 +113,8 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
     @Value("${short-link.domain.default}")
     private String createShortLinkDefaultDomain;
 
+    // TODO 【待修改】可以使用不存在的gid创建短链接
+    // TODO 【待优化】favion(网站图标的）的获取大大降低了短链接的创建速度
     @Transactional(rollbackFor = Exception.class)
     @Override
     public ShortLinkCreateRespDTO createShortLink(ShortLinkCreateReqDTO requestParam) {
@@ -139,6 +141,7 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
                 .delTime(0L)
                 .fullShortUrl(fullShortUrl)
                 .favicon(getFavicon(requestParam.getOriginUrl()))
+//                .favicon(null)
                 .build();
         ShortLinkGotoDO linkGotoDO = ShortLinkGotoDO.builder()
                 .fullShortUrl(fullShortUrl)
@@ -200,6 +203,7 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
                     .delTime(0L)
                     .fullShortUrl(fullShortUrl)
                     .favicon(getFavicon(requestParam.getOriginUrl()))
+//                    .favicon(null)
                     .build();
             ShortLinkGotoDO linkGotoDO = ShortLinkGotoDO.builder()
                     .fullShortUrl(fullShortUrl)
@@ -517,6 +521,7 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
         return shorUri;
     }
 
+    // 与查询布隆过滤器相比，这里在分布式锁中直接查询数据库
     private String generateSuffixByLock(ShortLinkCreateReqDTO requestParam) {
         int customGenerateCount = 0;
         String shorUri;
