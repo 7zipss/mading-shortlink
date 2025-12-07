@@ -35,6 +35,7 @@ public class DataBaseConfiguration {
      * 分页插件
      */
     @Bean
+    //“仅当 Spring 容器中不存在指定的 Bean 时，才创建并注册当前这个 Bean。”
     @ConditionalOnMissingBean
     public MybatisPlusInterceptor mybatisPlusInterceptorByAdmin() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();

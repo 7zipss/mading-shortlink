@@ -25,6 +25,19 @@
         </dependency>
     </dependencies>
 
+
+<!--默认行为（无插件）：生成一个普通 JAR（Plain JAR）。
+        内容：只包含该模块自己编写的 .class 文件和资源文件。
+        特点：不能直接通过 java -jar 运行（因为没有依赖包，也没有 Main-Class 清单），但可以被其他模块当作依赖（Library）引用。
+
+    插件行为（有插件）：生成一个可执行 JAR（Fat JAR）。
+        内容：包含项目代码 + 所有依赖的第三方 JAR 包（Tomcat, Spring, MyBatis 等全打进去）。
+        结构：类文件被移动到了 BOOT-INF/classes 下，依赖被放在 BOOT-INF/lib 下。
+        特点：可以直接通过 java -jar 运行，但很难被其他 Maven 模块当作依赖引用（因为目录结构变了，其他模块找不到类）。-->
+<!--聚合模式：
+    admin 和 project 只是 aggregation 的一部分（库），库是不需要独立运行的，也不能改变标准目录结构，所以必须删除插件。
+    微服务模式：
+    在微服务架构（v8 版本完全拆分模式）中，admin 和 project 是两个独立的应用程序-->
     <build>
         <finalName>${project.artifactId}</finalName>
         <plugins>
