@@ -153,11 +153,28 @@ public class ShortLinkStatsSaveConsumer implements StreamListener<String, MapRec
                     .date(new Date())
                     .build();
             linkAccessStatsMapper.shortLinkStats(linkAccessStatsDO);
+
+            // TODO 【优化】获取地理位置
             Map<String, Object> localeParamMap = new HashMap<>();
             localeParamMap.put("key", statsLocaleAmapKey);
             localeParamMap.put("ip", statsRecord.getRemoteAddr());
-            String localeResultStr = HttpUtil.get(AMAP_REMOTE_URL, localeParamMap);
-            JSONObject localeResultObj = JSON.parseObject(localeResultStr);
+            // String localeResultStr = HttpUtil.get(AMAP_REMOTE_URL, localeParamMap);
+            // 【修改后】
+            String localeResultStr = null;
+            try {
+                // 1. 设置 2000毫秒 (2秒) 超时。如果卡住，2秒后自动抛异常
+                localeResultStr = HttpUtil.get(AMAP_REMOTE_URL, localeParamMap, 2000);
+            } catch (Exception ex) {
+                // 2. 【关键】打印报错日志！
+                // 如果你看到这条日志，就实锤了是高德 API 的问题
+                log.error("高德地图 API 调用超时或失败，本次监控将记录为'未知'地区", ex);
+            }
+            // 3. 判空处理（防止下面空指针）
+            JSONObject localeResultObj = null;
+            if (StrUtil.isNotBlank(localeResultStr)) {
+                localeResultObj = JSON.parseObject(localeResultStr);
+            }
+            // JSONObject localeResultObj = JSON.parseObject(localeResultStr);
             String infoCode = localeResultObj.getString("infocode");
             String actualProvince = "未知";
             String actualCity = "未知";

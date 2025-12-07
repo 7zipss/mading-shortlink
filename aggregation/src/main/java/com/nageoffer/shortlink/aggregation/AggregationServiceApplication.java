@@ -27,13 +27,18 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
  * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：link）获取项目资料
  */
 @EnableDiscoveryClient
+//这是最关键的代码。
+// Spring Boot 默认只扫描启动类所在包及其子包。
+// 由于 admin 和 project 的包名（虽然都是 com.nageoffer.shortlink 但在不同模块）
+// 不在 aggregation 包下，必须手动指定扫描路径。
 @SpringBootApplication(scanBasePackages = {
-        "com.nageoffer.shortlink.admin",
-        "com.nageoffer.shortlink.project"
+        "com.nageoffer.shortlink.admin",   // [关键] 强制扫描 Admin 模块的 Bean (Controller, Service等)
+        "com.nageoffer.shortlink.project"  // [关键] 强制扫描 Project 模块的 Bean
 })
+//TODO  ↑↓ 两个模块中出现了“同名类”时（比如都有回收站业务），需要通过value=xxxByAdmin避免同名Bean
 @MapperScan(value = {
-        "com.nageoffer.shortlink.project.dao.mapper",
-        "com.nageoffer.shortlink.admin.dao.mapper"
+        "com.nageoffer.shortlink.project.dao.mapper", // [关键] 扫描 Project 的 MyBatis Mapper
+        "com.nageoffer.shortlink.admin.dao.mapper"    // [关键] 扫描 Admin 的 MyBatis Mapper
 })
 public class AggregationServiceApplication {
 

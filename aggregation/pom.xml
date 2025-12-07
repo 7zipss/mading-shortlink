@@ -9,6 +9,8 @@
     </parent>
     <artifactId>shortlink-aggregation</artifactId>
 
+    <!-- 将 admin 和 project 的所有 jar 包、类文件、第三方依赖全部拉取到当前工程的 Classpath 下。
+    这是聚合的基础。 -->
     <dependencies>
         <dependency>
             <groupId>${project.groupId}</groupId>

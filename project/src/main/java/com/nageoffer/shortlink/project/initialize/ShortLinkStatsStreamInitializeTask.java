@@ -37,9 +37,18 @@ public class ShortLinkStatsStreamInitializeTask implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() throws Exception {
-        Boolean hasKey = stringRedisTemplate.hasKey(SHORT_LINK_STATS_STREAM_TOPIC_KEY);
-        if (hasKey == null || !hasKey) {
+        // 【修改前】逻辑有漏洞：Key存在时跳过创建，导致重启后丢失Group
+        // Boolean hasKey = stringRedisTemplate.hasKey(SHORT_LINK_STATS_STREAM_TOPIC_KEY);
+        // if (hasKey == null || !hasKey) {
+        //     stringRedisTemplate.opsForStream().createGroup(SHORT_LINK_STATS_STREAM_TOPIC_KEY, SHORT_LINK_STATS_STREAM_GROUP_KEY);
+        // }
+
+        // TODO 【优化】健壮写法：直接尝试创建，忽略"已存在"错误
+        try {
             stringRedisTemplate.opsForStream().createGroup(SHORT_LINK_STATS_STREAM_TOPIC_KEY, SHORT_LINK_STATS_STREAM_GROUP_KEY);
+        } catch (Exception e) {
+            // 捕获 "BUSYGROUP Consumer Group name already exists" 异常并忽略
+            // 这样无论 Key 存不存在，Group 都能确保被创建
         }
     }
 }

@@ -3,15 +3,15 @@ server:
 
 spring:
   application:
-    name: short-link-aggregation
+    name: short-link-aggregation # 在 Nacos 注册的名字叫 aggregation
   datasource:
     driver-class-name: org.apache.shardingsphere.driver.ShardingSphereDriver
     url: jdbc:shardingsphere:classpath:shardingsphere-config-${database.env:dev}.yaml
   data:
     redis:
-      host: 127.0.0.1
+      host: 192.168.100.128
       port: 6379
-      password: 123456
+      password: 123321
   mvc:
     view:
       prefix: /templates/
@@ -21,7 +21,11 @@ spring:
       discovery:
         server-addr: 127.0.0.1:8848
 
+# [核心技巧] 远程调用回环配置
 aggregation:
+  # 解释：Admin 模块代码里写了 Feign 调用 Project。
+  # 在聚合模式下，Project 就在同一个进程里（localhost:8003）。
+  # 这里利用 Feign 的 url 属性，强制把请求发给“自己”。
   remote-url: http://127.0.0.1:${server.port}
 
 short-link:
@@ -31,6 +35,7 @@ short-link:
     enable: true
     time-window: 1
     max-access-count: 20
+  # 聚合模式下，短链的域名（端口号改为8003）
   domain:
     default: nurl.ink:8003
   stats:

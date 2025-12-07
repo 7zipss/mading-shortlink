@@ -9,9 +9,9 @@ spring:
     url: jdbc:shardingsphere:classpath:shardingsphere-config-${database.env:dev}.yaml
   data:
     redis:
-      host: 127.0.0.1
+      host: 192.168.100.128
       port: 6379
-      password: 123456
+      password: 123321
   cloud:
     # nacos服务地址（调用其他服务都要经过nacos调度、中转）
     nacos:

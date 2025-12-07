@@ -2,20 +2,49 @@ spring:
   cloud:
     gateway:
       routes:
-        - id: short-link-admin-aggregation
+        # ----------------------------------------------------
+        # 路由规则 1：后台管理接口 (Admin 模块)
+        # ----------------------------------------------------
+        - id: short-link-admin-aggregation  # 路由唯一标识 ID，名字可以随便起，只要不重复
+
+          # [核心配置] 转发目标
+          # lb:// 表示使用 LoadBalancer (负载均衡)
+          # short-link-aggregation 是聚合服务在 Nacos 注册的名字
+          # 意味着：所有匹配到的请求，都会被转发给聚合服务 (端口 8003)
           uri: lb://short-link-aggregation/api/short-link/admin/**
           predicates:
-            - Path=/api/short-link/admin/**
+                 # [断言] 路径匹配规则
+                 # 只有路径以 /api/short-link/admin/ 开头的请求，才会走这个路由
+                 - Path=/api/short-link/admin/**
+
           filters:
+            # [过滤器] 应用自定义的 Token 校验
             - name: TokenValidate
               args:
+                # 过滤器参数：配置白名单
+                # 这些路径不需要校验 Token (如登录、检查用户名是否存在)
                 whitePathList:
                   - /api/short-link/admin/v1/user/login
                   - /api/short-link/admin/v1/user/has-username
 
-        - id: short-link-project-aggregation
+        # ----------------------------------------------------
+        # 路由规则 2：C端短链接口 (Project 模块)
+        # ----------------------------------------------------
+        - id: short-link-project-aggregation # 路由 ID
+
+          # [核心配置] 转发目标
+          # 同样转发给 short-link-aggregation 聚合服务
+          # 因为在聚合模式下，Admin 和 Project 的代码都在同一个进程里
           uri: lb://short-link-aggregation/api/short-link/**
+
           predicates:
-            - Path=/api/short-link/**
+            # [断言] 路径匹配规则
+            # 匹配短链核心业务路径
+            - Path=/api/short-link/
+            - Path=/**
+
           filters:
+            # [过滤器] 同样应用 Token 校验
+            # 注意：这里没有配置 args (白名单)，说明默认情况下所有接口都要校验，
+            # 或者过滤器内部有默认逻辑处理
             - name: TokenValidate
