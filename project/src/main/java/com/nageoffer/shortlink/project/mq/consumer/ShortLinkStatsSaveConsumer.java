@@ -122,6 +122,7 @@ public class ShortLinkStatsSaveConsumer implements StreamListener<String, MapRec
         String fullShortUrl = statsRecord.getFullShortUrl();
         RReadWriteLock readWriteLock = redissonClient.getReadWriteLock(String.format(LOCK_GID_UPDATE_KEY, fullShortUrl));
         RLock rLock = readWriteLock.readLock();
+        // 修改trylock为lock，要求当前线程必须阻塞并执行完当前任务
         rLock.lock();
         try {
             LambdaQueryWrapper<ShortLinkGotoDO> queryWrapper = Wrappers.lambdaQuery(ShortLinkGotoDO.class)

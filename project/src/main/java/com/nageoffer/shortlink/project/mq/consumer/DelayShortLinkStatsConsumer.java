@@ -38,6 +38,7 @@ import static com.nageoffer.shortlink.project.common.constant.RedisKeyConstant.D
  * 延迟记录短链接统计组件
  * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：link）获取项目资料
  */
+//@Deprecated 是 Java 语言中的一个标准注解，用于标记某个类、方法、字段或接口已经过时或不再推荐使用。
 @Deprecated
 @Slf4j
 @Component
