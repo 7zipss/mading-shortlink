@@ -512,6 +512,12 @@ public class ShortLinkStatsServiceImpl implements ShortLinkStatsService {
         return actualResult;
     }
 
+    /**
+     * 检查这个分组是否属于当前用户
+     * 在上面更新状态的时候，检查这个分组是否属于当前用户
+     * @param gid
+     * @throws ServiceException
+     */
     public void checkGroupBelongToUser(String gid) throws ServiceException {
         String username = Optional.ofNullable(UserContext.getUsername())
                 .orElseThrow(() -> new ServiceException("用户未登录"));

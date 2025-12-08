@@ -169,6 +169,7 @@ public class GroupServiceImpl extends ServiceImpl<GroupMapper, GroupDO> implemen
         });
     }
 
+
     private String saveGroupUniqueReturnGid() {
         String gid = RandomGenerator.generateRandom();
         if (gidRegisterCachePenetrationBloomFilter.contains(gid)) {
@@ -178,6 +179,8 @@ public class GroupServiceImpl extends ServiceImpl<GroupMapper, GroupDO> implemen
                 .gid(gid)
                 .build();
         try {
+            // 通过t_group_unique判断gid是不是全局唯一
+            // （在按 username 分片的t_group中，数据库无法对非分片键（即 gid）实施“全局”唯一性检查。）
             groupUniqueMapper.insert(groupUniqueDO);
         } catch (DuplicateKeyException e) {
             return null;

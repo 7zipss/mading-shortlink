@@ -105,6 +105,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
             if (inserted < 1) {
                 throw new ClientException(USER_SAVE_ERROR);
             }
+            //将 BloomFilter.add 放在最后，是为了确保只有在业务数据（用户+分组）真正持久化成功后，
+            // 才对外宣称该用户名已被占用，这是处理“不可回滚资源”（如标准布隆过滤器）的标准范式。
             groupService.saveGroup(requestParam.getUsername(), "默认分组");
             userRegisterCachePenetrationBloomFilter.add(requestParam.getUsername());
         } catch (DuplicateKeyException ex) {
